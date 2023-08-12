@@ -18,7 +18,7 @@ public static class Logger
         OnlyLogFile = 1,
         ConsoleWithLogFile = 2
     }
-    public static void Trace(object message, LogLevel logLevel = LogLevel.INFO, LogType logType = LogType.OnlyConsole, string logFilePath = null)
+    public static void Log(object message, LogLevel logLevel = LogLevel.INFO, LogType logType = LogType.OnlyConsole, string logFilePath = null)
     {
         string assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? string.Empty;
         if (logType != LogType.OnlyLogFile)
