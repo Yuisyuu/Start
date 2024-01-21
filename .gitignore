@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # TextGameFramework game file
 *.tgm
+
+.idea
+.DS_Store
