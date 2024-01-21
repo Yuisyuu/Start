@@ -12,7 +12,7 @@ _ = Task.Factory.StartNew(() =>
         Thread.Sleep(600000);
     }
 }, TaskCreationOptions.LongRunning);
-await server.Start();
+server.Start();
 while (true)
 {
     string? input = Console.ReadLine();

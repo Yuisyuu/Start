@@ -9,7 +9,7 @@ internal class Server(string fileName)
     private Process? _process;
     private bool _updating;
 
-    public async Task Start()
+    public void Start()
     {
         while (true)
         {
@@ -26,7 +26,6 @@ internal class Server(string fileName)
             };
             if (!_process.Start())
             {
-                await Logger.LogAsync("启动失败！将重试！", LogLevel.Error);
                 continue;
             }
 
@@ -38,11 +37,10 @@ internal class Server(string fileName)
             {
                 while (_updating)
                 {
-                    Task.Yield();
+                    await Task.Yield();
                 }
 
-                await Logger.LogAsync("检测到服务器关闭，正在启动", LogLevel.Warn);
-                await Start();
+                Start();
             };
             break;
         }
@@ -50,57 +48,62 @@ internal class Server(string fileName)
 
     public async Task Update()
     {
-        await Logger.LogAsync("开始检测更新");
-        HttpClient httpClient = new();
+        using HttpClient httpClient = new();
         string link;
         {
-            CancellationTokenSource tokenSource = new();
-            tokenSource.CancelAfter(10000);
             try
             {
-                string pageData = await httpClient.GetStringAsync("https://www.minecraft.net/download/server/bedrock",
-                    tokenSource.Token);
+                string pageData = await httpClient.GetStringAsync("https://www.minecraft.net/download/server/bedrock");
                 link = Regex.UrlRegex().Match(pageData).Value;
             }
-            catch (TaskCanceledException)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
-                await Logger.LogAsync("检测失败", LogLevel.Warn);
                 return;
             }
         }
-
         string version = Regex.VersionRegex().Match(link).Value;
         if (string.IsNullOrWhiteSpace(version) ||
             (File.Exists("lv.dat") && await File.ReadAllTextAsync("lv.dat") == version))
         {
-            await Logger.LogAsync("检测完毕，尚无更新版本");
             return;
         }
 
-        await Logger.LogAsync($"检测到新版本{version}，开始更新");
         if (_process is not null && !_process.HasExited)
         {
-            await _process.StandardInput.WriteLineAsync(
-                Encoding.Default.GetString(Encoding.UTF8.GetBytes($"say 即将关闭服务器并更新至{version}！")));
+            await WriteLineAsync($"say 服务器即将关闭并更新至{version}！");
         }
 
         Directory.CreateDirectory("cache");
-        await File.WriteAllBytesAsync("cache/bds.zip", await httpClient.GetByteArrayAsync(link));
+        await using (FileStream fileSteam = File.OpenWrite("cache/bds.zip"))
+        {
+            try
+            {
+                await using Stream stream = await httpClient.GetStreamAsync(link);
+                await stream.CopyToAsync(fileSteam);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                return;
+            }
+            finally
+            {
+                fileSteam.Close();
+            }
+        }
+
         _updating = true;
         if (_process is not null && !_process.HasExited)
         {
-            await _process.StandardInput.WriteLineAsync(Encoding.Default.GetString("stop"u8));
+            await WriteLineAsync("stop");
             await _process.WaitForExitAsync();
         }
 
-        await Logger.LogAsync("开始更新");
         File.Copy("server.properties", "cache/server.properties");
         ZipFile.ExtractToDirectory("cache/bds.zip", ".", true);
         File.Copy("cache/server.properties", "server.properties", true);
         _updating = false;
         await File.WriteAllTextAsync("lv.dat", version);
         Directory.Delete("cache", true);
-        await Logger.LogAsync("更新完毕");
     }
 
     public async Task WriteLineAsync(string input)
