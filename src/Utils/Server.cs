@@ -51,29 +51,27 @@ internal class Server(string fileName)
     public async Task Update()
     {
         await Logger.LogAsync("开始检测更新");
-        CancellationTokenSource tokenSource = new();
         HttpClient httpClient = new();
-        string? link = default;
-        Task task = Task.Run(async () =>
+        string link;
         {
-            string pageData = await httpClient.GetStringAsync("https://www.minecraft.net/download/server/bedrock",
-                tokenSource.Token);
-            link = Regex.UrlRegex().Match(pageData).Value;
-        }, tokenSource.Token);
-        await task.WaitAsync(TimeSpan.FromSeconds(10), tokenSource.Token);
-        if (!task.IsCompleted)
-        {
-            await tokenSource.CancelAsync();
-        }
-
-        if (string.IsNullOrWhiteSpace(link))
-        {
-            await Logger.LogAsync("检测失败", LogLevel.Warn);
-            return;
+            CancellationTokenSource tokenSource = new();
+            tokenSource.CancelAfter(10000);
+            try
+            {
+                string pageData = await httpClient.GetStringAsync("https://www.minecraft.net/download/server/bedrock",
+                    tokenSource.Token);
+                link = Regex.UrlRegex().Match(pageData).Value;
+            }
+            catch (TaskCanceledException)
+            {
+                await Logger.LogAsync("检测失败", LogLevel.Warn);
+                return;
+            }
         }
 
         string version = Regex.VersionRegex().Match(link).Value;
-        if (string.IsNullOrWhiteSpace(version) || (File.Exists("lv.dat") && File.ReadAllText("lv.dat") == version))
+        if (string.IsNullOrWhiteSpace(version) ||
+            (File.Exists("lv.dat") && await File.ReadAllTextAsync("lv.dat") == version))
         {
             await Logger.LogAsync("检测完毕，尚无更新版本");
             return;
@@ -87,12 +85,12 @@ internal class Server(string fileName)
         }
 
         Directory.CreateDirectory("cache");
-        await File.WriteAllBytesAsync("cache/bds.zip", await httpClient.GetByteArrayAsync(link), tokenSource.Token);
+        await File.WriteAllBytesAsync("cache/bds.zip", await httpClient.GetByteArrayAsync(link));
         _updating = true;
         if (_process is not null && !_process.HasExited)
         {
             await _process.StandardInput.WriteLineAsync(Encoding.Default.GetString("stop"u8));
-            await _process.WaitForExitAsync(tokenSource.Token);
+            await _process.WaitForExitAsync();
         }
 
         await Logger.LogAsync("开始更新");
@@ -100,7 +98,7 @@ internal class Server(string fileName)
         ZipFile.ExtractToDirectory("cache/bds.zip", ".", true);
         File.Copy("cache/server.properties", "server.properties", true);
         _updating = false;
-        await File.WriteAllTextAsync("lv.dat", version, tokenSource.Token);
+        await File.WriteAllTextAsync("lv.dat", version);
         Directory.Delete("cache", true);
         await Logger.LogAsync("更新完毕");
     }
