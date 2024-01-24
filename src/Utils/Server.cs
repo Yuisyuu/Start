@@ -6,8 +6,8 @@ namespace Start.Utils;
 
 internal class Server(string fileName)
 {
+    private readonly ManualResetEventSlim _manualResetEvent = new(true);
     private Process? _process;
-    private bool _updating;
 
     public void Start()
     {
@@ -33,13 +33,9 @@ internal class Server(string fileName)
             _process.OutputDataReceived += (_, e) => Console.WriteLine(e.Data);
             _process.BeginErrorReadLine();
             _process.ErrorDataReceived += (_, e) => Console.WriteLine(e.Data);
-            _process.Exited += async (_, _) =>
+            _process.Exited += (_, _) =>
             {
-                while (_updating)
-                {
-                    await Task.Yield();
-                }
-
+                _manualResetEvent.Wait();
                 Start();
             };
             break;
@@ -91,7 +87,7 @@ internal class Server(string fileName)
             }
         }
 
-        _updating = true;
+        _manualResetEvent.Reset();
         if (_process is not null && !_process.HasExited)
         {
             await WriteLineAsync("stop");
@@ -101,28 +97,18 @@ internal class Server(string fileName)
         File.Copy("server.properties", "cache/server.properties");
         ZipFile.ExtractToDirectory("cache/bds.zip", ".", true);
         File.Copy("cache/server.properties", "server.properties", true);
-        _updating = false;
+        _manualResetEvent.Set();
         await File.WriteAllTextAsync("lv.dat", version);
         Directory.Delete("cache", true);
     }
 
     public async Task WriteLineAsync(string input)
     {
-        if (_process is null)
-        {
-            throw new NullReferenceException();
-        }
-
-        await _process.StandardInput.WriteLineAsync(Encoding.Default.GetString(Encoding.UTF8.GetBytes(input)));
+        await _process!.StandardInput.WriteLineAsync(Encoding.Default.GetString(Encoding.UTF8.GetBytes(input)));
     }
 
     public async Task WaitForExitAsync()
     {
-        if (_process is null)
-        {
-            throw new NullReferenceException();
-        }
-
-        await _process.WaitForExitAsync();
+        await _process!.WaitForExitAsync();
     }
 }
