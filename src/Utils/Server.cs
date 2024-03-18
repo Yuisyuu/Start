@@ -59,7 +59,7 @@ internal class Server(string fileName)
         }
         string version = Regex.VersionRegex().Match(link).Value;
         if (string.IsNullOrWhiteSpace(version) ||
-            (File.Exists("lv.dat") && await File.ReadAllTextAsync("lv.dat") == version))
+            (File.Exists("lv.dat") && (await File.ReadAllTextAsync("lv.dat") == version)))
         {
             return;
         }
