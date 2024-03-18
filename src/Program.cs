@@ -1,4 +1,4 @@
-﻿using Start.Utils;
+using Start.Utils;
 using System.Text;
 
 Console.InputEncoding = Encoding.UTF8;
